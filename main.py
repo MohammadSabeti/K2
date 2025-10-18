@@ -15,16 +15,13 @@ import streamlit as st
 import psycopg2
 import sqlite3
 
-if "postgres" in st.secrets:
-    conn = psycopg2.connect(st.secrets["postgres"]["url"])
-else:
-    conn = sqlite3.connect("data/k2.db")
+
 
 # --------------------------
 # مسیرهای پروژه
 # --------------------------
 DATA_DIR = pathlib.Path("data")
-DB_FILE = DATA_DIR / "k2.db"
+# DB_FILE = DATA_DIR / "k2.db"
 FONTS_DIR = pathlib.Path("fonts")
 IMAGES_DIR = pathlib.Path("images")
 DATA_DIR.mkdir(exist_ok=True)
@@ -35,41 +32,63 @@ IMAGES_DIR.mkdir(exist_ok=True)
 # --------------------------
 # ایجاد جداول SQLite
 # --------------------------
+def get_connection():
+    return psycopg2.connect(st.secrets["postgres"]["url"])
+
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
 
     # جدول کاربران
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             role TEXT DEFAULT 'user',
-            created_at TEXT NOT NULL
-        )
-    """
-    )
+            created_at TIMESTAMP NOT NULL
+);
+""")
 
+    # # جدول فعالیت‌ها
+    # cursor.execute(
+    #     """
+    #     CREATE TABLE IF NOT EXISTS user_activities (
+    #         id INTEGER PRIMARY KEY AUTOINCREMENT,
+    #         username TEXT NOT NULL,
+    #         week_start TEXT NOT NULL,
+    #         week_end TEXT NOT NULL,
+    #         name TEXT NOT NULL,
+    #         target INTEGER NOT NULL,
+    #         done INTEGER NOT NULL,
+    #         percent INTEGER NOT NULL,
+    #         note TEXT,
+    #         saved_at TEXT NOT NULL,
+    #         week_feedback TEXT,
+    #         week_total_score INTEGER NOT NULL,
+    #         progress_diff INTEGER DEFAULT 0
+    #     )
+    # """
+    # )
     # جدول فعالیت‌ها
     cursor.execute(
         """
-        CREATE TABLE IF NOT EXISTS user_activities (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL,
-            week_start TEXT NOT NULL,
-            week_end TEXT NOT NULL,
-            name TEXT NOT NULL,
-            target INTEGER NOT NULL,
-            done INTEGER NOT NULL,
-            percent INTEGER NOT NULL,
-            note TEXT,
-            saved_at TEXT NOT NULL,
-            week_feedback TEXT,
-            week_total_score INTEGER NOT NULL,
-            progress_diff INTEGER DEFAULT 0 
-        )
+CREATE TABLE IF NOT EXISTS user_activities (
+    id SERIAL PRIMARY KEY,
+    username TEXT NOT NULL,
+    week_start TEXT NOT NULL,
+    week_end TEXT NOT NULL,
+    name TEXT NOT NULL,
+    target INTEGER NOT NULL,
+    done INTEGER NOT NULL,
+    percent INTEGER NOT NULL,
+    note TEXT,
+    saved_at TIMESTAMP NOT NULL,
+    week_feedback TEXT,
+    week_total_score INTEGER NOT NULL,
+    progress_diff INTEGER DEFAULT 0
+);
     """
     )
 
@@ -132,10 +151,10 @@ def verify_password(password: str, stored_hash: str) -> bool:
 # توابع مدیریت کاربر
 # --------------------------
 def get_user(username: str):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT username, password_hash, role FROM users WHERE username = ?",
+        "SELECT username, password_hash, role FROM users WHERE username = %s",
         (username,),
     )
     row = cursor.fetchone()
@@ -146,13 +165,13 @@ def get_user(username: str):
 
 
 def create_user(username: str, password: str, role: str = "user"):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
             """
             INSERT INTO users (username, password_hash, role, created_at)
-            VALUES (?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s)
         """,
             (
                 username,
@@ -170,10 +189,10 @@ def create_user(username: str, password: str, role: str = "user"):
 
 
 def change_password(username: str, new_password: str):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE users SET password_hash = ? WHERE username = ?",
+        "UPDATE users SET password_hash = %s WHERE username = %s",
         (hash_password(new_password), username),
     )
     conn.commit()
@@ -561,14 +580,14 @@ def append_user_history(
 
     if week_total_score is None:
         week_total_score = 0
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     for act in activities:
         cursor.execute(
             """
             INSERT INTO user_activities (
                 username, week_start, week_end, name, target, done, percent, note, saved_at, week_feedback, week_total_score, progress_diff
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
             (
                 username,
@@ -626,13 +645,13 @@ def load_user_history(username: str) -> pd.DataFrame:
         - داده‌ها بر اساس ستون `saved_at` به ترتیب صعودی مرتب می‌شوند.
     """
 
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     query = """
     SELECT 
         username, week_start, week_end, name, target, done, percent, note, 
         saved_at, week_feedback, week_total_score, progress_diff
     FROM user_activities 
-    WHERE username = ?
+    WHERE username = %s
     ORDER BY saved_at ASC
     """
     df = pd.read_sql_query(query, conn, params=(username,))
@@ -2614,7 +2633,7 @@ if role == "admin":
         )
 
     with tab2:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_connection()
         all_history = pd.read_sql_query(
             "SELECT * FROM user_activities ORDER BY saved_at DESC", conn
         )
