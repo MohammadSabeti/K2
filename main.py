@@ -625,7 +625,7 @@ def load_user_history(username: str) -> pd.DataFrame:
 
 
     res = supabase.table("user_activities").select("*").eq("username", username).order("saved_at",
-                                                                                       asc=True).execute()
+                                                                                       desc=False).execute()
     df = pd.DataFrame(res.data)
     if not df.empty:
         df["progress_diff"] = pd.to_numeric(df["progress_diff"], errors='coerce').fillna(0).astype(int)
