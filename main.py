@@ -1966,20 +1966,17 @@ html_avatar = (
     else '<div class="user-avatar" style="background:#1e293b;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:40px;">👤</div>'
 )
 
-# st.markdown(f"""
-# <div class="user-card">
-#     {html_avatar}
-#     <div class="user-name"><span>👋</span>
-#     خوش اومدی
-# {html.escape(username)}
-# دادا
-# </div>
-#     <div class="user-sub">از همین‌جا به قله بعدی صعود کن 🏔️</div>
-#     <form action="#" method="post">
-#         <button class="logout-btn" onclick="window.location.reload()">🚪 خروج</button>
-#     </form>
-# </div>
-# """, unsafe_allow_html=True)
+st.markdown(f"""
+<div class="user-card">
+    {html_avatar}
+    <div class="user-name"><span>👋</span>
+    خوش اومدی
+{html.escape(username)}
+دادا
+</div>
+    <div class="user-sub">از همین‌جا به قله بعدی صعود کن 🏔️</div>
+</div>
+""", unsafe_allow_html=True)
 
 # --- کنترل باز/بسته تنظیمات ---
 st.markdown("""
