@@ -1384,7 +1384,7 @@ def render_premium_history_ui(
                 title += f" | {'📈' if progress_diff > 0 else '📉'} {progress_diff}%"
 
             with st.expander(title, expanded=False):
-                render_premium_week_section(group)
+                render_premium_week_section(group,group.iloc[0]["username"])
 
 
 # --------------------------
