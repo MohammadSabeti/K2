@@ -13,9 +13,11 @@ import re
 import html
 import streamlit as st
 import psycopg2
-import sqlite3
+from supabase import create_client
 
-
+url = st.secrets["supabase"]["url"]
+key = st.secrets["supabase"]["service_key"]
+supabase = create_client(url, key)
 
 # --------------------------
 # مسیرهای پروژه
@@ -96,7 +98,7 @@ CREATE TABLE IF NOT EXISTS user_activities (
     conn.close()
 
 
-init_db()
+# init_db()
 
 
 # --------------------------
@@ -151,52 +153,38 @@ def verify_password(password: str, stored_hash: str) -> bool:
 # توابع مدیریت کاربر
 # --------------------------
 def get_user(username: str):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT username, password_hash, role FROM users WHERE username = %s",
-        (username,),
-    )
-    row = cursor.fetchone()
-    conn.close()
-    return (
-        {"username": row[0], "password_hash": row[1], "role": row[2]} if row else None
-    )
+    res = supabase.table("users").select("*").eq("username", username).execute()
+    if res.data:
+        user = res.data[0]
+        return {
+            "username": user["username"],
+            "password_hash": user["password_hash"],
+            "role": user["role"]
+        }
+    return None
 
 
 def create_user(username: str, password: str, role: str = "user"):
-    conn = get_connection()
-    cursor = conn.cursor()
     try:
-        cursor.execute(
-            """
-            INSERT INTO users (username, password_hash, role, created_at)
-            VALUES (%s, %s, %s, %s)
-        """,
-            (
-                username,
-                hash_password(password),
-                role,
-                datetime.now(timezone.utc).isoformat(),
-            ),
-        )
-        conn.commit()
+        password_hash = hash_password(password)
+        created_at = datetime.now(timezone.utc).isoformat()
+
+        supabase.table("users").insert({
+            "username": username,
+            "password_hash": password_hash,
+            "role": role,
+            "created_at": created_at
+        }).execute()
+
         return True
-    except sqlite3.IntegrityError:
-        return False  # نام کاربری تکراری
-    finally:
-        conn.close()
+    except Exception as e:
+        timed_message('error',f"❌ خطا در ایجاد کاربر: {e}")
+        return False
 
 
 def change_password(username: str, new_password: str):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE users SET password_hash = %s WHERE username = %s",
-        (hash_password(new_password), username),
-    )
-    conn.commit()
-    conn.close()
+    new_hash = hash_password(new_password)
+    supabase.table("users").update({"password_hash": new_hash}).eq("username", username).execute()
 
 
 # --------------------------
@@ -573,39 +561,29 @@ def append_user_history(
         ... )
 
     Notes:
-        - از ماژول `sqlite3` برای اتصال و ثبت داده‌ها استفاده می‌کند.
+
         - اگر کلید "progress_diff" در دیکشنری فعالیت وجود نداشته باشد، مقدار پیش‌فرض ۰ در نظر گرفته می‌شود.
         - تابع پس از ثبت تمامی فعالیت‌ها، تغییرات را در پایگاه داده اعمال و اتصال را می‌بندد.
     """
 
     if week_total_score is None:
         week_total_score = 0
-    conn = get_connection()
-    cursor = conn.cursor()
+
     for act in activities:
-        cursor.execute(
-            """
-            INSERT INTO user_activities (
-                username, week_start, week_end, name, target, done, percent, note, saved_at, week_feedback, week_total_score, progress_diff
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """,
-            (
-                username,
-                week_start,
-                week_end,
-                act["name"],
-                act["target"],
-                act["done"],
-                act["percent"],
-                act["note"],
-                act["saved_at"],
-                week_feedback or "",
-                week_total_score,
-                int(act.get("progress_diff", 0) or 0),
-            ),
-        )
-    conn.commit()
-    conn.close()
+        supabase.table("user_activities").insert({
+            "username": username,
+            "week_start": week_start,
+            "week_end": week_end,
+            "name": act["name"],
+            "target": act["target"],
+            "done": act["done"],
+            "percent": act["percent"],
+            "note": act["note"],
+            "saved_at": act["saved_at"],
+            "week_feedback": week_feedback or "",
+            "week_total_score": week_total_score,
+            "progress_diff": int(act.get("progress_diff", 0) or 0),
+        }).execute()
 
 
 def load_user_history(username: str) -> pd.DataFrame:
@@ -640,24 +618,17 @@ def load_user_history(username: str) -> pd.DataFrame:
           username week_start week_end        name  target  done  percent note  ...
 
     Notes:
-        - از ماژول `sqlite3` برای اتصال به پایگاه داده و `pandas.read_sql_query` برای بارگذاری داده‌ها استفاده می‌کند.
+        - از ماژول  برای اتصال به پایگاه داده و `pandas.read_sql_query` برای بارگذاری داده‌ها استفاده می‌کند.
         - اگر ستون `progress_diff` مقادیر نامعتبر یا خالی داشته باشد، با ۰ جایگزین می‌شود.
         - داده‌ها بر اساس ستون `saved_at` به ترتیب صعودی مرتب می‌شوند.
     """
 
-    conn = get_connection()
-    query = """
-    SELECT 
-        username, week_start, week_end, name, target, done, percent, note, 
-        saved_at, week_feedback, week_total_score, progress_diff
-    FROM user_activities 
-    WHERE username = %s
-    ORDER BY saved_at ASC
-    """
-    df = pd.read_sql_query(query, conn, params=(username,))
+
+    res = supabase.table("user_activities").select("*").eq("username", username).order("saved_at",
+                                                                                       asc=True).execute()
+    df = pd.DataFrame(res.data)
     if not df.empty:
         df["progress_diff"] = pd.to_numeric(df["progress_diff"], errors='coerce').fillna(0).astype(int)
-    conn.close()
     return df
 
 
@@ -2633,11 +2604,8 @@ if role == "admin":
         )
 
     with tab2:
-        conn = get_connection()
-        all_history = pd.read_sql_query(
-            "SELECT * FROM user_activities ORDER BY saved_at DESC", conn
-        )
-        conn.close()
+        res = supabase.table("user_activities").select("*").order("saved_at", desc=True).execute()
+        all_history = pd.DataFrame(res.data)
 
         render_premium_history_ui(
             all_history,
