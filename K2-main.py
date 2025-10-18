@@ -9,9 +9,16 @@ import random
 import base64
 import streamlit.components.v1 as components
 import time
-import sqlite3
 import re
 import html
+import streamlit as st
+import psycopg2
+import sqlite3
+
+if "postgres" in st.secrets:
+    conn = psycopg2.connect(st.secrets["postgres"]["url"])
+else:
+    conn = sqlite3.connect("data/k2.db")
 
 # --------------------------
 # مسیرهای پروژه
@@ -83,6 +90,33 @@ def sanitize_username(username: str) -> str:
     return clean[:50] or "anonymous"  # حداکثر 50 کاراکتر
 
 
+def get_admin_cred():
+    """
+    بارگذاری اطلاعات ادمین از st.secrets یا متغیر محیطی.
+    این تابع نام کاربری و رمز (به صورت خام/plain) را بازمی‌گرداند.
+    اگر چیزی پیدا نشد، (None, None) باز می‌کند.
+    """
+    # 1) از st.secrets (Streamlit Cloud یا .streamlit/secrets.toml)
+    try:
+        if "admin" in st.secrets:
+            admin_cfg = st.secrets["admin"]
+            usr = admin_cfg.get("username")
+            pw = admin_cfg.get("password")  # توجه: اینجا رمز خام انتظار می‌رود
+            if usr and pw is not None:
+                return usr, pw
+    except Exception:
+        # در صورتی که st.secrets در محیط فعلی دردسترس نیست، بیخیال می‌شویم و به fallback می‌رویم
+        pass
+
+    # 2) fallback به متغیر محیطی (در صورت نیاز)
+    usr = os.environ.get("K2_ADMIN_USERNAME")
+    pw = os.environ.get("K2_ADMIN_PASSWORD")  # رمز خام از env
+    if usr and pw is not None:
+        return usr, pw
+
+    # 3) اگر هیچ‌کدام نبود، None برگردان
+    return None, None
+
 # --------------------------
 # هش ایمن رمز عبور
 # --------------------------
@@ -144,256 +178,6 @@ def change_password(username: str, new_password: str):
     )
     conn.commit()
     conn.close()
-
-
-# --------------------------
-# فونت فارسی
-# --------------------------
-font_path = FONTS_DIR / "vazir/Vazir-Medium.ttf"
-font_b64 = None
-if font_path.exists():
-    with open(font_path, "rb") as f:
-        font_data = f.read()
-        font_b64 = base64.b64encode(font_data).decode()
-    st.markdown(
-        f"""
-        <style>
-        @font-face {{
-              font-family: 'Vazir-Medium';
-              src: url(data:font/ttf;base64,{font_b64}) format('truetype');
-              font-weight: normal;
-              font-style: normal;
-        }}
-        html, body, [class*="css"], div, span, p, h1, h2, h3, h4, h5, h6,
-        input, textarea, button, label, li, th, td , span {{
-            font-family: 'Vazir-Medium', sans-serif !important;
-            letter-spacing: 0 !important;
-            direction: rtl;
-            text-align: right;
-       }} 
-        </style>
-    """,
-        unsafe_allow_html=True,
-    )
-
-# --------------------------
-# URL تصویر K2 (از Imgur)
-# --------------------------
-background_url = "https://i.imgur.com/0jQN9Hj.png"  # URL مستقیم به تصویر
-
-# --------------------------
-# فزودن CSS سراسری تم شیشه‌ای
-# --------------------------
-GLASS_THEME_CSS = f"""
-<style>
-:root {{
-    --glass-bg: rgba(15, 23, 42, 0.55);
-    --glass-border: rgba(148, 163, 184, 0.35);
-    --glass-highlight: rgba(59, 130, 246, 0.35);
-    --glass-text: #e2e8f0;
-    --glass-subtle: rgba(148, 163, 184, 0.4);
-}}
-
-
-[data-testid="stAppViewContainer"] {{
-    background-image:
-        linear-gradient(145deg, rgba(15, 23, 42, 0.65), rgba(30, 41, 59, 0.55)),
-        radial-gradient(circle at 20% 20%, rgba(59,130,246,0.18), transparent 45%),
-        radial-gradient(circle at 80% 10%, rgba(236,72,153,0.15), transparent 50%),
-        url('{background_url}');
-    background-size: cover, 100% 100%, 100% 100%, cover;
-    background-repeat: no-repeat;
-    background-position: center center;
-    background-attachment: fixed;
-    color: var(--glass-text);
-}}
-
-.k2-glass-card {{
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: 24px;
-    padding: 28px 32px;
-    box-shadow: 0 25px 45px rgba(15, 23, 42, 0.35);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    position: relative;
-    overflow: hidden;
-}}
-
-.k2-glass-card::before {{
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, rgba(59,130,246,0.12), rgba(59,130,246,0));
-    opacity: 0.8;
-}}
-
-.k2-glass-card::after {{
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    border: 1px solid rgba(255,255,255,0.04);
-}}
-
-.k2-glass-card > * {{
-    position: relative;
-    z-index: 2;
-}}
-
-.k2-login-wrapper {{
-    max-width: 520px;
-    margin: 60px auto 40px;
-    padding: 0 16px;
-}}
-
-.k2-login-title {{
-    font-size: 28px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: #f8fafc;
-    margin-bottom: 12px;
-}}
-
-.k2-login-subtitle {{
-    color: rgba(226, 232, 240, 0.8);
-    font-size: 14px;
-    line-height: 1.6;
-    margin-bottom: 28px;
-}}
-
-div[data-testid="stTextInput"] input,
-div[data-testid="stPasswordInput"] input {{
-    background: rgba(15, 23, 42, 0.45);
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 16px;
-    color: #f8fafc;
-    padding: 12px 16px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
-}}
-
-div[data-testid="stTextInput"] label,
-div[data-testid="stPasswordInput"] label {{
-    color: rgba(226, 232, 240, 0.85);
-    font-weight: 600;
-}}
-
-.stButton > button {{
-    background: linear-gradient(135deg, rgba(96, 165, 250, 0.9), rgba(59, 130, 246, 0.9));
-    color: white;
-    font-weight: 600;
-    border-radius: 999px;
-    border: none;
-    padding: 10px 28px;
-    box-shadow: 0 12px 25px rgba(59, 130, 246, 0.35);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}}
-
-.stButton > button:hover {{
-    transform: translateY(-2px);
-    box-shadow: 0 18px 30px rgba(59, 130, 246, 0.45);
-}}
-
-@media (max-width: 640px) {{
-    .k2-login-wrapper {{
-        margin: 30px auto 20px;
-    }}
-    .k2-login-title {{
-        font-size: 22px;
-    }}
-    .k2-glass-card {{
-        padding: 22px 20px;
-        border-radius: 20px;
-    }}
-
-    .k2-login-hero {{
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}}
-
-.k2-login-badge {{
-    align-self: flex-start;
-    padding: 6px 14px;
-    border-radius: 999px;
-    background: linear-gradient(135deg, rgba(96,165,250,0.25), rgba(59,130,246,0.15));
-    border: 1px solid rgba(59,130,246,0.35);
-    color: rgba(226,232,240,0.85);
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.8px;
-}}
-
-.k2-login-title {{
-    font-size: 32px;
-    font-weight: 800;
-    color: #f9fafb;
-    margin: 0;
-    line-height: 1.2;
-    text-shadow: 0 8px 24px rgba(15,23,42,0.45);
-}}
-
-.k2-login-subtitle {{
-    color: rgba(226,232,240,0.78);
-    font-size: 15px;
-    line-height: 1.9;
-    max-width: 420px;
-}}
-
-.k2-login-motto {{
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 14px 16px;
-    border-radius: 18px;
-    background: rgba(15,23,42,0.4);
-    border: 1px solid rgba(148,163,184,0.25);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
-    color: rgba(226,232,240,0.9);
-    font-size: 13px;
-}}
-
-.k2-login-motto strong {{
-    display: block;
-    color: #93c5fd;
-    margin-bottom: 2px;
-    font-size: 13px;
-}}
-
-@media (max-width: 640px) {{
-    .k2-login-title {{
-        font-size: 26px;
-    }}
-    .k2-login-subtitle {{
-        font-size: 13px;
-        max-width: none;
-    }}
-    .k2-login-motto {{
-        font-size: 12px;
-        padding: 12px;
-        border-radius: 14px;
-    }}
-}}
-</style>
-"""
-st.markdown(GLASS_THEME_CSS, unsafe_allow_html=True)
-
-st.set_page_config(page_title="K2 - مسیر رشد فردی", page_icon="⛰️", layout="centered")
-# --------------------------
-# مقداردهی اولیه session_state
-# --------------------------
-for key, default in [
-    ("users", {}),
-    ("logged_in", False),
-    ("username", None),
-    ("role", "user"),
-    ("week_set", False),
-    ("activities", []),
-]:
-    if key not in st.session_state:
-        st.session_state[key] = default
 
 
 # --------------------------
@@ -478,28 +262,68 @@ def timed_message(msg_type: str, message: str, duration: int = 10, position="inl
     html = f"""
     <style>
     @font-face {{
-        font-family: 'Vazir-Medium';
-        src: url(data:font/ttf;base64,{font_b64}) format('truetype');
-        font-weight: normal;
-        font-style: normal;
-    }}
-    @keyframes fadeIn {{
-        0% {{ opacity: 0; transform: translateY(-15px) scale(0.98); }}
-        100% {{ opacity: 1; transform: translateY(0) scale(1); }}
-    }}
+    font-family: 'Vazir-Medium';
+    src: url(data:font/ttf;base64,{font_b64}) format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}}
 
-    @keyframes fadeOut {{
-        0% {{ opacity: 1; transform: translateY(0) scale(1); }}
-        100% {{ opacity: 0; transform: translateY(-15px) scale(0.98); }}
-    }}
+@keyframes fadeIn {{
+    0% {{ opacity: 0; transform: translateY(-15px) scale(0.98); }}
+    100% {{ opacity: 1; transform: translateY(0) scale(1); }}
+}}
 
-    @media (max-width: 600px) {{
-        #custom-banner {{
-            width: 90% !important;
-            font-size: 14px !important;
-            padding: 10px 14px !important;
-        }}
+@keyframes fadeOut {{
+    0% {{ opacity: 1; transform: translateY(0) scale(1); }}
+    100% {{ opacity: 0; transform: translateY(-15px) scale(0.98); }}
+}}
+
+#custom-banner > div {{
+    direction: rtl;
+    backdrop-filter: blur(10px) saturate(180%);
+    -webkit-backdrop-filter: blur(10px) saturate(180%);
+    background:{{c['bg']}};
+    border:1px solid {{c['border']}};
+    color:{{c['text']}};
+    font-family:'Vazir-Medium', sans-serif;
+    font-weight:500;
+    font-size:16px;
+    padding:16px 24px;
+    border-radius:14px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.4);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    gap:12px;
+    animation: fadeIn 0.5s ease-in-out;
+    transition: all 0.5s ease-in-out;
+    width: 80%;
+    max-width: 600px;
+}}
+
+@media (max-width: 768px) {{
+    #custom-banner > div {{
+        width: 90vw;
+        font-size: 14px;
+        padding: 12px 16px;
+        gap: 8px;
     }}
+    #custom-banner > div span:first-child {{
+        font-size: 20px;
+    }}
+}}
+
+@media (max-width: 480px) {{
+    #custom-banner > div {{
+        width: 95vw;
+        font-size: 13px;
+        padding: 10px 12px;
+        gap: 6px;
+    }}
+    #custom-banner > div span:first-child {{
+        font-size: 18px;
+    }}
+}}
     </style>
 
     <div id="custom-banner" style="{container_style}">
@@ -541,13 +365,6 @@ def timed_message(msg_type: str, message: str, duration: int = 10, position="inl
     </script>
     """
     components.html(html, height=100)
-
-
-# ---- منطق نمایش پایدار بین rerun‌ها ----
-if "banner" in st.session_state:
-    banner_data = st.session_state.pop("banner")
-    if banner_data.get("position") == "top":
-        timed_message(**banner_data)
 
 
 def motivational_message(percent: int) -> str:
@@ -836,7 +653,7 @@ def get_progress_style(percent: int):
 
 
 def render_premium_week_section(
-        group: pd.DataFrame, username=st.session_state.username, is_admin: bool = False
+        group: pd.DataFrame,username:str, is_admin: bool = False
 ):
     """نمایش بخش هفتگی پریمیوم کاربران با طراحی تعاملی و واکنش‌گرا در Streamlit.
 
@@ -1610,6 +1427,261 @@ def show_home_header():
     )
 
 
+# --------------------------
+# فونت فارسی
+# --------------------------
+font_path = FONTS_DIR / "vazir/Vazir-Medium.ttf"
+font_b64 = None
+if font_path.exists():
+    with open(font_path, "rb") as f:
+        font_data = f.read()
+        font_b64 = base64.b64encode(font_data).decode()
+    st.markdown(
+        f"""
+        <style>
+        @font-face {{
+              font-family: 'Vazir-Medium';
+              src: url(data:font/ttf;base64,{font_b64}) format('truetype');
+              font-weight: normal;
+              font-style: normal;
+        }}
+        html, body, [class*="css"], div, span, p, h1, h2, h3, h4, h5, h6,
+        input, textarea, button, label, li, th, td , span {{
+            font-family: 'Vazir-Medium', sans-serif !important;
+            letter-spacing: 0 !important;
+            direction: rtl;
+            text-align: right;
+       }} 
+        </style>
+    """,
+        unsafe_allow_html=True,
+    )
+
+# --------------------------
+# URL تصویر K2 (از Imgur)
+# --------------------------
+background_url = "https://i.imgur.com/0jQN9Hj.png"  # URL مستقیم به تصویر
+
+# --------------------------
+# فزودن CSS سراسری تم شیشه‌ای
+# --------------------------
+GLASS_THEME_CSS = f"""
+<style>
+:root {{
+    --glass-bg: rgba(15, 23, 42, 0.55);
+    --glass-border: rgba(148, 163, 184, 0.35);
+    --glass-highlight: rgba(59, 130, 246, 0.35);
+    --glass-text: #e2e8f0;
+    --glass-subtle: rgba(148, 163, 184, 0.4);
+}}
+
+
+[data-testid="stAppViewContainer"] {{
+    background-image:
+        linear-gradient(145deg, rgba(15, 23, 42, 0.65), rgba(30, 41, 59, 0.55)),
+        radial-gradient(circle at 20% 20%, rgba(59,130,246,0.18), transparent 45%),
+        radial-gradient(circle at 80% 10%, rgba(236,72,153,0.15), transparent 50%),
+        url('{background_url}');
+    background-size: cover, 100% 100%, 100% 100%, cover;
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-attachment: fixed;
+    color: var(--glass-text);
+}}
+
+.k2-glass-card {{
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 24px;
+    padding: 28px 32px;
+    box-shadow: 0 25px 45px rgba(15, 23, 42, 0.35);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    position: relative;
+    overflow: hidden;
+}}
+
+.k2-glass-card::before {{
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(59,130,246,0.12), rgba(59,130,246,0));
+    opacity: 0.8;
+}}
+
+.k2-glass-card::after {{
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 1px solid rgba(255,255,255,0.04);
+}}
+
+.k2-glass-card > * {{
+    position: relative;
+    z-index: 2;
+}}
+
+.k2-login-wrapper {{
+    max-width: 520px;
+    margin: 60px auto 40px;
+    padding: 0 16px;
+}}
+
+.k2-login-title {{
+    font-size: 28px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #f8fafc;
+    margin-bottom: 12px;
+}}
+
+.k2-login-subtitle {{
+    color: rgba(226, 232, 240, 0.8);
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 28px;
+}}
+
+div[data-testid="stTextInput"] input,
+div[data-testid="stPasswordInput"] input {{
+    background: rgba(15, 23, 42, 0.45);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 16px;
+    color: #f8fafc;
+    padding: 12px 16px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}}
+
+div[data-testid="stTextInput"] label,
+div[data-testid="stPasswordInput"] label {{
+    color: rgba(226, 232, 240, 0.85);
+    font-weight: 600;
+}}
+
+.stButton > button {{
+    background: linear-gradient(135deg, rgba(96, 165, 250, 0.9), rgba(59, 130, 246, 0.9));
+    color: white;
+    font-weight: 600;
+    border-radius: 999px;
+    border: none;
+    padding: 10px 28px;
+    box-shadow: 0 12px 25px rgba(59, 130, 246, 0.35);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}}
+
+.stButton > button:hover {{
+    transform: translateY(-2px);
+    box-shadow: 0 18px 30px rgba(59, 130, 246, 0.45);
+}}
+
+@media (max-width: 640px) {{
+    .k2-login-wrapper {{
+        margin: 30px auto 20px;
+    }}
+    .k2-login-title {{
+        font-size: 22px;
+    }}
+    .k2-glass-card {{
+        padding: 22px 20px;
+        border-radius: 20px;
+    }}
+
+    .k2-login-hero {{
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}}
+
+.k2-login-badge {{
+    align-self: flex-start;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, rgba(96,165,250,0.25), rgba(59,130,246,0.15));
+    border: 1px solid rgba(59,130,246,0.35);
+    color: rgba(226,232,240,0.85);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+}}
+
+.k2-login-title {{
+    font-size: 32px;
+    font-weight: 800;
+    color: #f9fafb;
+    margin: 0;
+    line-height: 1.2;
+    text-shadow: 0 8px 24px rgba(15,23,42,0.45);
+}}
+
+.k2-login-subtitle {{
+    color: rgba(226,232,240,0.78);
+    font-size: 15px;
+    line-height: 1.9;
+    max-width: 420px;
+}}
+
+.k2-login-motto {{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    background: rgba(15,23,42,0.4);
+    border: 1px solid rgba(148,163,184,0.25);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    color: rgba(226,232,240,0.9);
+    font-size: 13px;
+}}
+
+.k2-login-motto strong {{
+    display: block;
+    color: #93c5fd;
+    margin-bottom: 2px;
+    font-size: 13px;
+}}
+
+@media (max-width: 640px) {{
+    .k2-login-title {{
+        font-size: 26px;
+    }}
+    .k2-login-subtitle {{
+        font-size: 13px;
+        max-width: none;
+    }}
+    .k2-login-motto {{
+        font-size: 12px;
+        padding: 12px;
+        border-radius: 14px;
+    }}
+}}
+</style>
+"""
+st.markdown(GLASS_THEME_CSS, unsafe_allow_html=True)
+
+st.set_page_config(page_title="K2 - مسیر رشد فردی", page_icon="⛰️", layout="centered")
+# --------------------------
+# مقداردهی اولیه session_state
+# --------------------------
+for key, default in [
+    ("users", {}),
+    ("logged_in", False),
+    ("username", None),
+    ("role", "user"),
+    ("week_set", False),
+    ("activities", []),
+]:
+    if key not in st.session_state:
+        st.session_state[key] = default
+
+# ---- منطق نمایش پایدار بین rerun‌ها ----
+if "banner" in st.session_state:
+    banner_data = st.session_state.pop("banner")
+    if banner_data.get("position") == "top":
+        timed_message(**banner_data)
+
 show_home_header()
 st.markdown("---")
 
@@ -1734,14 +1806,14 @@ if not st.session_state.logged_in:
             else:
                 username = sanitize_username(raw_username)
                 user = get_user(username)
-
-                if username == "BashiYeka" and password == "YekaBash2":
+                admin_user, admin_pw = get_admin_cred()
+                if username == admin_user and password == admin_pw:
                     if not user:
-                        create_user("BashiYeka", "YekaBash2", "admin")
-                        user = get_user("BashiYeka")
-                    if user and verify_password("123", user["password_hash"]):
+                        create_user(admin_user, admin_pw, "admin")
+                        user = get_user(admin_user)
+                    if user and verify_password(admin_pw, user["password_hash"]):
                         st.session_state.update(
-                            logged_in=True, username="BashiYeka", role="admin"
+                            logged_in=True, username=admin_user, role="admin"
                         )
                         st.session_state["banner"] = {
                             "message": "خوش‌آمدی BashiYeka 🌄",
@@ -1980,7 +2052,7 @@ if not st.session_state.week_set:
     )
     timed_message(
         "info",
-        "📅 لطفاً ابتدا بازه هفته را تعیین کنید تا بتوانید فعالیت‌ها را اضافه کنید.",
+        "📅 برای افزودن فعالیت ها لطفاً ابتدا بازه هفته را تعیین کنید.",
     )
     if st.button("▶️ تایید بازه هفته"):
         if not (validate_jalali_date(week_start) and validate_jalali_date(week_end)):
@@ -2195,8 +2267,6 @@ if st.session_state.week_set:
                 st.session_state.activities = []
                 st.session_state.week_set = False
                 st.rerun()
-
-
 
 # --------------------------
 # مشاهده تاریخچه
