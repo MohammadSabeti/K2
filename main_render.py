@@ -16,8 +16,8 @@ import psycopg2
 from supabase import create_client
 import io
 
-url = st.secrets.get("SUPABASE_URL")
-key = st.secrets.get("SUPABASE_SERVICE_KEY")
+url = os.getenv("SUPABASE_URL")
+key = os.getenv("SUPABASE_SERVICE_KEY")
 supabase = create_client(url, key)
 
 # --------------------------
@@ -120,11 +120,11 @@ def get_admin_cred():
     """
     # 1) از st.secrets (Streamlit Cloud یا .streamlit/secrets.toml)
     try:
-        if "admin" in st.secrets:
-            usr = st.secrets.get("ADMIN_USERNAME")
-            pw = st.secrets.get("ADMIN_PASSWORD")  # توجه: اینجا رمز خام انتظار می‌رود
-            if usr and pw is not None:
-                return usr, pw
+        # if "admin" in st.secrets:
+        usr = os.getenv("ADMIN_USERNAME")
+        pw = os.getenv("ADMIN_PASSWORD")  # توجه: اینجا رمز خام انتظار می‌رود
+        if usr and pw is not None:
+            return usr, pw
     except Exception:
         # در صورتی که st.secrets در محیط فعلی دردسترس نیست، بیخیال می‌شویم و به fallback می‌رویم
         pass
