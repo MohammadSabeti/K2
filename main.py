@@ -161,11 +161,11 @@ def upload_profile_image(username, uploaded_file):
     file_path = f"avatars/{safe_username}.png"
 
     # آپلود فایل در باکت مشخص‌شده
-    response = supabase.storage.from_("avatars").upload(file_path, file_content, {"upsert": True})
+    response = supabase.storage.from_("avatars").upload(file_path, file_content, upsert=True)
 
-    # بررسی وضعیت پاسخ
-    if response.status_code not in (200, 201):
-        raise Exception(response.json())
+    # بررسی نتیجه
+    if not response or response.status_code not in (200, 201):
+        raise Exception(getattr(response, "json", lambda: response)())
 
     # ساخت لینک عمومی
     public_url = supabase.storage.from_("avatars").get_public_url(file_path)
