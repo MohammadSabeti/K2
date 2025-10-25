@@ -14,6 +14,7 @@ import html
 import streamlit as st
 import psycopg2
 from supabase import create_client
+import io
 
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["service_key"]
@@ -148,6 +149,19 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, stored_hash: str) -> bool:
     return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
 
+def upload_profile_image(username, uploaded_file):
+    # مسیر ذخیره در Supabase Storage
+    file_path = f"avatars/{username}.png"
+
+    # خواندن فایل در حافظه
+    file_bytes = uploaded_file.getbuffer()
+
+    # آپلود در Supabase bucket با نام مثلاً "user-files"
+    supabase.storage.from_("user-files").upload(file_path, io.BytesIO(file_bytes), {"content-type": uploaded_file.type})
+
+    # گرفتن لینک عمومی برای نمایش در Streamlit
+    public_url = supabase.storage.from_("user-files").get_public_url(file_path)
+    return public_url
 
 # --------------------------
 # توابع مدیریت کاربر
@@ -1846,10 +1860,15 @@ username = st.session_state.username
 safe_username = sanitize_username(username)
 user_img_path = IMAGES_DIR / f"{safe_username}.png"
 
-# بررسی تصویر پروفایل
+# بررسی تصویر پروفایل (نسخه Supabase Storage)
 user_img_url = None
-if user_img_path.exists():
-    user_img_url = f"data:image/png;base64,{base64.b64encode(open(user_img_path, 'rb').read()).decode()}"
+
+# اگر لینک در session_state ذخیره شده
+if "user_image_url" in st.session_state and st.session_state["user_image_url"]:
+    user_img_url = st.session_state["user_image_url"]
+else:
+    # عکس پیش‌فرض
+    user_img_url = "https://via.placeholder.com/150?text=No+Image"
 
 # مقدار پیش‌فرض نمایش تنظیمات
 if "show_settings" not in st.session_state:
@@ -2014,10 +2033,13 @@ with st.container():
 
         uploaded_file = st.file_uploader("🖼️ تغییر عکس پروفایل", type=["png", "jpg"])
         if uploaded_file is not None:
-            with open(user_img_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            timed_message("success", "📸 عکس پروفایل با موفقیت آپلود شد.")
-            st.rerun()
+            try:
+                public_url = upload_profile_image(username, uploaded_file)
+                st.session_state["user_image_url"] = public_url
+                timed_message("success", "📸 عکس پروفایل با موفقیت آپلود شد.")
+                st.rerun()
+            except Exception as e:
+                timed_message("error", f"❌ خطا در آپلود عکس: {e}")
 
         new_password = st.text_input("🔒 تغییر رمز عبور", type="password")
         if st.button("💾 ثبت رمز جدید"):
