@@ -150,20 +150,51 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 def upload_profile_image(username, uploaded_file):
     """
-    آپلود عکس پروفایل کاربر به Supabase Storage و بازگرداندن لینک عمومی
+    آپلود عکس پروفایل کاربر به Supabase Storage و بازگرداندن لینک عمومی.
+
+    این نسخه:
+      - پسوند فایل را از uploaded_file.name برداشت می‌کند (در صورت موجود بودن).
+      - از uploaded_file.read() برای دریافت بایت‌ها استفاده می‌کند.
+      - upsert را به صورت کلیدواژه می‌فرستد (یا اگر لازم باشد مقدار دیکشنری را به str تبدیل می‌کند).
+      - پاسخ را به طور مقاوم بررسی کرده و لینک عمومی را بازمی‌گرداند.
     """
-    file_content = uploaded_file.getvalue()  # 👈 دریافت بایت‌ها از UploadedFile
-    file_path = f"avatars/{username}.png"
+    # گرفتن بایت‌های فایل
+    file_bytes = uploaded_file.read()
 
-    # آپلود در باکت مشخص‌شده
-    response = supabase.storage.from_("user-images").upload(file_path, file_content, {"upsert": True})
+    # تعیین پسوند امن
+    ext = "png"
+    if hasattr(uploaded_file, "name") and uploaded_file.name:
+        if "." in uploaded_file.name:
+            ext = uploaded_file.name.rsplit(".", 1)[-1].lower()
+            # ایمن‌سازی پسوندهای غیرمجاز (اختیاری)
+            if ext not in ("png", "jpg", "jpeg", "webp", "gif"):
+                ext = "png"
 
-    if response.status_code != 200:
-        raise Exception(response.json())
+    file_path = f"avatars/{username}.{ext}"
 
-    # ساخت لینک عمومی
-    public_url = supabase.storage.from_("user-images").get_public_url(file_path)
-    return public_url
+    # تلاش برای آپلود
+    try:
+        # راه‌حل پیشنهادی: ارسال upsert به عنوان keyword arg (اگر کلاینت پشتیبانی کند)
+        response = supabase.storage.from_("user-images").upload(file_path, file_bytes, upsert=True)
+    except TypeError:
+        # اگر این امضا پشتیبانی نشد، از دیکشنری ولی با مقادیر str استفاده کن
+        response = supabase.storage.from_("user-images").upload(file_path, file_bytes, {"upsert": "true"})
+
+    # بررسی پاسخ به صورت مقاوم
+    if hasattr(response, "status_code"):
+        if response.status_code not in (200, 201):
+            raise Exception(getattr(response, "text", str(response)))
+    elif isinstance(response, dict):
+        # برخی نسخه‌ها ممکنه dict حاوی خطا باشند
+        if response.get("error"):
+            raise Exception(response["error"])
+
+    # گرفتن URL عمومی
+    public = supabase.storage.from_("user-images").get_public_url(file_path)
+    if isinstance(public, dict):
+        return public.get("publicURL") or public.get("public_url") or str(public)
+    return public
+
 # --------------------------
 # توابع مدیریت کاربر
 # --------------------------
