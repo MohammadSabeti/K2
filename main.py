@@ -153,21 +153,24 @@ def upload_profile_image(username, uploaded_file):
     """
     آپلود عکس پروفایل کاربر به Supabase Storage و بازگرداندن لینک عمومی
     """
-    # دریافت محتوای فایل
     file_content = uploaded_file.getvalue()
-
-    # ایمن‌سازی نام فایل (جلوگیری از خطای InvalidKey)
-    safe_username = urllib.parse.quote(username, safe="")  # کاراکترهای غیرلاتین رو encode می‌کنه
+    safe_username = urllib.parse.quote(username, safe="")
     file_path = f"avatars/{safe_username}.png"
 
-    # آپلود فایل در باکت مشخص‌شده
-    response = supabase.storage.from_("avatars").upload(file_path, file_content, upsert=True)
+    # حذف فایل قبلی اگر وجود داشته باشد
+    try:
+        supabase.storage.from_("avatars").remove([file_path])
+    except Exception:
+        pass  # اگر فایل نبود، نادیده بگیر
 
-    # بررسی نتیجه
-    if not response or response.status_code not in (200, 201):
-        raise Exception(getattr(response, "json", lambda: response)())
+    # آپلود فایل
+    response = supabase.storage.from_("avatars").upload(file_path, file_content)
 
-    # ساخت لینک عمومی
+    # بررسی خطا
+    if not response or "error" in response:
+        raise Exception(response)
+
+    # لینک عمومی
     public_url = supabase.storage.from_("avatars").get_public_url(file_path)
     return public_url
 # --------------------------
