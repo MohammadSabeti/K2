@@ -153,8 +153,8 @@ def upload_profile_image(username, uploaded_file):
     آپلود عکس پروفایل کاربر به Supabase Storage و بازگرداندن لینک عمومی
     """
     file_content = uploaded_file.getvalue()
-    safe_username = urllib.parse.quote(username, safe="")
-    file_path = f"avatars/{safe_username}.png"
+    safe_username_img = urllib.parse.quote(username, safe="")
+    file_path = f"avatars/{safe_username_img}.png"
 
     # حذف فایل قبلی اگر وجود داشته باشد
     try:
