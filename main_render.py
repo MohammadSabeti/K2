@@ -149,19 +149,21 @@ def verify_password(password: str, stored_hash: str) -> bool:
     return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
 
 def upload_profile_image(username, uploaded_file):
-    # مسیر ذخیره در Supabase Storage
+    """
+    آپلود عکس پروفایل کاربر به Supabase Storage و بازگرداندن لینک عمومی
+    """
+    file_content = uploaded_file.getvalue()  # 👈 دریافت بایت‌ها از UploadedFile
     file_path = f"avatars/{username}.png"
 
-    # خواندن فایل در حافظه
-    file_bytes = uploaded_file.getbuffer()
+    # آپلود در باکت مشخص‌شده
+    response = supabase.storage.from_("user-images").upload(file_path, file_content, {"upsert": True})
 
-    # آپلود در Supabase bucket با نام مثلاً "user-files"
-    supabase.storage.from_("user-files").upload(file_path, io.BytesIO(file_bytes), {"content-type": uploaded_file.type})
+    if response.status_code != 200:
+        raise Exception(response.json())
 
-    # گرفتن لینک عمومی برای نمایش در Streamlit
-    public_url = supabase.storage.from_("user-files").get_public_url(file_path)
+    # ساخت لینک عمومی
+    public_url = supabase.storage.from_("user-images").get_public_url(file_path)
     return public_url
-
 # --------------------------
 # توابع مدیریت کاربر
 # --------------------------
