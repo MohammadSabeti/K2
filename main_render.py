@@ -153,8 +153,8 @@ def upload_profile_image(username, uploaded_file):
     آپلود عکس پروفایل کاربر به Supabase Storage و بازگرداندن لینک عمومی
     """
     file_content = uploaded_file.getvalue()
-    safe_username_img = urllib.parse.quote(username, safe="")
-    file_path = f"avatars/{safe_username_img}.png"
+    random_number = random.randint(100000, 999999)  # عدد رندوم ۶ رقمی
+    file_path = f"avatars/{random_number}.png"
 
     # حذف فایل قبلی اگر وجود داشته باشد
     try:
