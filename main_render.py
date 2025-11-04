@@ -19,7 +19,7 @@ import urllib.parse
 url = os.getenv("SUPABASE_URL")
 key = os.getenv("SUPABASE_SERVICE_KEY")
 supabase = create_client(url, key)
-
+PROGRESS_DIFF=0
 # --------------------------
 # مسیرهای پروژه
 # --------------------------
@@ -2199,21 +2199,37 @@ if st.session_state.week_set:
                 # --- محاسبه progress_diff ---
                 hist = load_user_history(username)
                 if not hist.empty:
-                    prev_weeks = hist[hist["week_start"] < week_start]
-                    if not prev_weeks.empty:
-                        # آخرین هفته قبلی
-                        last_week_score = int(prev_weeks["week_total_score"].iloc[0] or 0)
-                        diff = total_score - last_week_score
+                    # گروه‌بندی بر اساس هفته برای پیدا کردن هفته‌های کامل
+                    hist["week_key"] = hist["week_start"] + "|" + hist["week_end"]
+                    week_groups = hist.groupby("week_key").first().reset_index()
+                    week_groups = week_groups.sort_values("week_start", ascending=False)
+                    # پیدا کردن هفته فعلی و قبلی
+                    current_week_key = f"{week_start}|{week_end}"
+                    current_in_history = week_groups[
+                        week_groups["week_key"] == current_week_key
+                        ]
+                    if len(week_groups) > 1:
+                        # جدیدترین هفته قبل از هفته فعلی
+                        prev_week_row = (
+                            week_groups[week_groups["week_start"] < week_start].iloc[0]
+                            if not week_groups[
+                                week_groups["week_start"] < week_start
+                                ].empty
+                            else None
+                        )
+                        if prev_week_row is not None:
+                            last_week_score = int(prev_week_row["week_total_score"])
+                            PROGRESS_DIFF = total_score - last_week_score
                     else:
-                        diff = 0  # اولین هفته
+                        PROGRESS_DIFF = 0  # اولین هفته
                 else:
-                    diff = 0
+                    PROGRESS_DIFF = 0
 
-                diff = int(diff or 0)
+                PROGRESS_DIFF = int(PROGRESS_DIFF or 0)
                 # حالا diff را به همه فعالیت‌ها اضافه می‌کنیم
                 for act in st.session_state.activities:
                     act["progress_diff"] = (
-                        diff  # همه فعالیت‌های یک هفته یک مقدار diff دارند
+                        PROGRESS_DIFF  # همه فعالیت‌های یک هفته یک مقدار diff دارند
                     )
 
                 # ذخیره در SQLite
@@ -2254,17 +2270,18 @@ if st.session_state.week_set:
                             else None
                         )
                         if prev_week_row is not None:
-                            last_week_score = int(prev_week_row["week_total_score"])
-                            diff = total_score - last_week_score
-                            if diff > 0:
+                            # last_week_score = int(prev_week_row["week_total_score"])
+                            # diff = total_score - last_week_score
+
+                            if PROGRESS_DIFF > 0:
                                 timed_message(
                                     "success",
-                                    f"🔼 عالی! نسبت به هفته قبل {diff}% پیشرفت داشتی 👏",
+                                    f"🔼 عالی! نسبت به هفته قبل {PROGRESS_DIFF}% پیشرفت داشتی 👏",
                                 )
-                            elif diff < 0:
+                            elif PROGRESS_DIFF < 0:
                                 timed_message(
                                     "warning",
-                                    f"🔽 این هفته {abs(diff)}٪ افت کردی، ولی ادامه بده 💪",
+                                    f"🔽 این هفته {abs(PROGRESS_DIFF)}٪ افت کردی، ولی ادامه بده 💪",
                                 )
                             else:
                                 timed_message(
