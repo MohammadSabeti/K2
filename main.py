@@ -2179,7 +2179,7 @@ if st.session_state.week_set:
     # --------------------------
     st.markdown("---")
     st.subheader("🔖 بازخورد کلی هفته")
-    week_feedback = st.text_area("✍️ بازخورد کلی هفته", max_chars=500, height=120)
+    week_feedback = st.text_area("✍️ بازخورد کلی هفته", height=120)
 
     if "save_message" in st.session_state and st.session_state.save_message:
         st.markdown(st.session_state.save_message, unsafe_allow_html=True)
