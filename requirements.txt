@@ -4,6 +4,11 @@ jdatetime==5.2.0
 numpy==2.3.3
 streamlit==1.50.0
 psycopg2-binary==2.9.11
-supabase==2.22.0
+supabase==2.4.3
+postgrest
+gotrue
+supafunc
+storage3
+python-dotenv
 
 
